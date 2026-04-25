@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Command Center</title>
+  <style>
+    :root {
+      --bg:       #020810;
+      --card:     rgba(8, 18, 38, 0.75);
+      --border:   rgba(255,255,255,0.06);
+      --text:     #e2e8f0;
+      --muted:    #4e6080;
+
+      --blue:     #3b82f6;
+      --cyan:     #06b6d4;
+      --purple:   #a855f7;
+      --teal:     #14b8a6;
+      --green:    #22c55e;
+      --amber:    #f59e0b;
+      --red:      #ef4444;
+
+      --c-ppaisie: #60a5fa;
+      --c-labs:    #c084fc;
+      --c-ai:      #2dd4bf;
+      --c-monitor: #fbbf24;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── CANVAS BG ── */
+    #bgCanvas {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── LAYOUT ── */
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 0 28px 80px;
+    }
+
+    /* ── HEADER ── */
+    .site-header {
+      padding: 48px 0 36px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 44px;
+      position: relative;
+    }
+
+    .header-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--cyan); font-weight: 600; margin-bottom: 16px;
+    }
+    .header-badge-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: badgePulse 2s ease infinite;
+    }
+    @keyframes badgePulse {
+      0%,100% { opacity:1; } 50% { opacity:.35; }
+    }
+
+    .header-title {
+      font-size: clamp(32px, 5.5vw, 64px);
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1.05;
+      background: linear-gradient(135deg, #93c5fd 0%, #06b6d4 30%, #a855f7 65%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      background-size: 300%;
+      animation: titleGrad 9s ease infinite;
+    }
+    @keyframes titleGrad {
+      0%,100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+
+    .header-sub {
+      margin-top: 10px;
+      font-size: 15px;
+      color: var(--muted);
+      letter-spacing: .3px;
+    }
+
+    .header-machine {
+      margin-top: 8px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      color: rgba(6,182,212,.65);
+    }
+
+    /* scan line */
+    .site-header::after {
+      content: '';
+      position: absolute; bottom: -1px; left: 20%; right: 20%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), transparent);
+      animation: scanGrad 4s ease infinite;
+    }
+    @keyframes scanGrad {
+      0%,100% { left:40%; right:40%; opacity:.5; }
+      50%      { left:10%; right:10%; opacity:1; }
+    }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .stat-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 8px 20px;
+      font-size: 13px; font-weight: 600;
+      backdrop-filter: blur(8px);
+    }
+    .pill-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .pill-dot.green { background:var(--green); box-shadow:0 0 8px rgba(34,197,94,.6); animation:badgePulse 2s infinite; }
+    .pill-dot.red   { background:var(--red); }
+    .pill-dot.cyan  { background:var(--cyan); }
+    .stat-val { font-size: 18px; font-weight: 800; }
+    .stat-lbl { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+    /* ── REFRESH ── */
+    .refresh-line {
+      text-align: center; font-size: 12px; color: var(--muted);
+      margin-bottom: 44px;
+    }
+    .refresh-line span { color: rgba(6,182,212,.7); font-family: monospace; }
+    #btnRefresh {
+      background: transparent;
+      border: 1px solid rgba(6,182,212,.25);
+      color: var(--cyan); padding: 4px 14px; border-radius: 6px;
+      cursor: pointer; font-size: 11px; margin-left: 8px;
+      transition: background .2s;
+    }
+    #btnRefresh:hover { background: rgba(6,182,212,.08); }
+
+    /* ── GROUP SECTION ── */
+    .group-section { margin-bottom: 52px; }
+
+    .group-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 22px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .group-emblem {
+      width: 50px; height: 50px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; flex-shrink: 0;
+    }
+    .group-info { flex: 1; }
+    .group-title { font-size: 20px; font-weight: 800; letter-spacing: -.4px; }
+    .group-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .group-badge {
+      font-size: 11px; color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 100px; padding: 3px 12px;
+      white-space: nowrap;
+    }
+    .group-online {
+      font-size: 11px; font-weight: 600;
+      border-radius: 100px; padding: 3px 12px;
+      white-space: nowrap; border: 1px solid transparent;
+    }
+
+    /* group color themes */
+    .g-ppaisie .group-emblem { background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.2); }
+    .g-ppaisie .group-title  { color: var(--c-ppaisie); }
+    .g-ppaisie .group-online { background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.25); color: var(--c-ppaisie); }
+
+    .g-labs .group-emblem { background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.2); }
+    .g-labs .group-title  { color: var(--c-labs); }
+    .g-labs .group-online { background: rgba(168,85,247,.1); border-color: rgba(168,85,247,.25); color: var(--c-labs); }
+
+    .g-ai .group-emblem { background: rgba(20,184,166,.12); border: 1px solid rgba(20,184,166,.2); }
+    .g-ai .group-title  { color: var(--c-ai); }
+    .g-ai .group-online { background: rgba(20,184,166,.1); border-color: rgba(20,184,166,.25); color: var(--c-ai); }
+
+    .g-monitor .group-emblem { background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.2); }
+    .g-monitor .group-title  { color: var(--c-monitor); }
+    .g-monitor .group-online { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.25); color: var(--c-monitor); }
+
+    /* ── CARDS GRID ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 14px;
+    }
+
+    /* ── CARD ── */
+    .svc-card {
+      display: block; text-decoration: none; color: inherit;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 20px 18px;
+      backdrop-filter: blur(14px);
+      transition: transform .25s, box-shadow .25s, border-color .25s;
+      position: relative; overflow: hidden;
+    }
+
+    /* top shimmer line */
+    .svc-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      opacity: 0; transition: opacity .3s;
+    }
+
+    .g-ppaisie .svc-card::before { background: linear-gradient(90deg, transparent, var(--c-ppaisie), transparent); }
+    .g-labs    .svc-card::before { background: linear-gradient(90deg, transparent, var(--c-labs), transparent); }
+    .g-ai      .svc-card::before { background: linear-gradient(90deg, transparent, var(--c-ai), transparent); }
+    .g-monitor .svc-card::before { background: linear-gradient(90deg, transparent, var(--c-monitor), transparent); }
+
+    .svc-card:hover { transform: translateY(-4px); }
+    .svc-card:hover::before { opacity: 1; }
+
+    .g-ppaisie .svc-card:hover { box-shadow: 0 12px 40px rgba(59,130,246,.18); border-color: rgba(96,165,250,.28); }
+    .g-labs    .svc-card:hover { box-shadow: 0 12px 40px rgba(168,85,247,.18); border-color: rgba(192,132,252,.28); }
+    .g-ai      .svc-card:hover { box-shadow: 0 12px 40px rgba(20,184,166,.18); border-color: rgba(45,212,191,.28); }
+    .g-monitor .svc-card:hover { box-shadow: 0 12px 40px rgba(245,158,11,.18); border-color: rgba(251,191,36,.28); }
+
+    /* card internals */
+    .card-head {
+      display: flex; align-items: flex-start; gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .card-icon {
+      width: 50px; height: 50px; border-radius: 13px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+
+    .g-ppaisie .card-icon { background: rgba(59,130,246,.1);  border: 1px solid rgba(59,130,246,.2); }
+    .g-labs    .card-icon { background: rgba(168,85,247,.1);  border: 1px solid rgba(168,85,247,.2); }
+    .g-ai      .card-icon { background: rgba(20,184,166,.1);  border: 1px solid rgba(20,184,166,.2); }
+    .g-monitor .card-icon { background: rgba(245,158,11,.1);  border: 1px solid rgba(245,158,11,.2); }
+
+    .card-meta { flex: 1; min-width: 0; }
+    .card-name {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      line-height: 1.3; margin-bottom: 5px;
+    }
+    .card-port {
+      font-family: 'Courier New', monospace;
+      font-size: 11px; color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 5px; padding: 2px 7px;
+      display: inline-block;
+    }
+
+    .card-status {
+      display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+    }
+    .s-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+    }
+    .s-dot.up   { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.7); animation: sDotPulse 2.5s ease infinite; }
+    .s-dot.down { background: var(--red); }
+    .s-dot.chk  { background: var(--amber); animation: sDotPulse .9s ease infinite; }
+    @keyframes sDotPulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:.5; transform:scale(.75); }
+    }
+    .s-lbl { font-size: 11px; font-weight: 700; letter-spacing: .3px; }
+    .s-lbl.up   { color: var(--green); }
+    .s-lbl.down { color: var(--red); }
+    .s-lbl.chk  { color: var(--amber); }
+
+    .card-desc {
+      font-size: 13px; color: var(--muted); line-height: 1.55;
+    }
+
+    .card-footer {
+      margin-top: 14px;
+      padding-top: 13px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .card-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+    .card-tag {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 2px 7px; border-radius: 4px;
+      border: 1px solid transparent;
+    }
+
+    .g-ppaisie .card-tag { background: rgba(59,130,246,.08);  border-color: rgba(59,130,246,.2);  color: #93c5fd; }
+    .g-labs    .card-tag { background: rgba(168,85,247,.08);  border-color: rgba(168,85,247,.2);  color: #d8b4fe; }
+    .g-ai      .card-tag { background: rgba(20,184,166,.08);  border-color: rgba(20,184,166,.2);  color: #5eead4; }
+    .g-monitor .card-tag { background: rgba(245,158,11,.08);  border-color: rgba(245,158,11,.2);  color: #fcd34d; }
+
+    .card-open {
+      font-size: 11px; font-weight: 700; letter-spacing: .4px;
+      opacity: 0; transition: opacity .2s;
+    }
+    .svc-card:hover .card-open { opacity: 1; }
+    .g-ppaisie .card-open { color: var(--c-ppaisie); }
+    .g-labs    .card-open { color: var(--c-labs); }
+    .g-ai      .card-open { color: var(--c-ai); }
+    .g-monitor .card-open { color: var(--c-monitor); }
+
+    /* offline card dimming */
+    .svc-card.offline { opacity: .65; }
+
+    /* ── FOOTER ── */
+    .site-footer {
+      text-align: center;
+      padding: 24px 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .site-footer span { color: rgba(6,182,212,.5); font-family: monospace; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .header-title { letter-spacing: -1px; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-badge">
+      <div class="header-badge-dot"></div>
+      Sistem activ · eae-local-ai
+    </div>
+    <h1 class="header-title">AI Command Center</h1>
+    <p class="header-sub">Toate serviciile AI rulate local — monitorizare în timp real</p>
+    <p class="header-machine" id="hostDisplay">—</p>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat-pill">
+      <div class="pill-dot cyan"></div>
+      <span class="stat-val" id="statTotal">—</span>
+      <span class="stat-lbl">servicii</span>
+    </div>
+    <div class="stat-pill">
+      <div class="pill-dot green"></div>
+      <span class="stat-val" id="statOnline" style="color:var(--green)">—</span>
+      <span class="stat-lbl">online</span>
+    </div>
+    <div class="stat-pill">
+      <div class="pill-dot red"></div>
+      <span class="stat-val" id="statOffline" style="color:var(--red)">—</span>
+      <span class="stat-lbl">offline</span>
+    </div>
+  </div>
+
+  <div class="refresh-line">
+    Actualizat: <span id="lastUpdated">—</span>
+    &nbsp;· auto-reîmprospătare 30s
+    <button id="btnRefresh">↺ Acum</button>
+  </div>
+
+  <!-- GROUPS rendered by JS -->
+  <div id="groupsRoot"></div>
+
+  <footer class="site-footer">
+    AI Command Center &mdash; <span>eae-local-ai · 2026</span>
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════════════
+const GROUPS = [
+  {
+    id: 'ppaisie',
+    g: 'g-ppaisie',
+    icon: '🤖',
+    title: 'ppaisie AI Factory',
+    desc: '14 microservere AI locale — Ollama, Whisper, TTS, OCR, RAG, Face Recognition',
+  },
+  {
+    id: 'labs',
+    g: 'g-labs',
+    icon: '🔬',
+    title: 'Laboratoare Virtuale',
+    desc: 'Simulatoare interactive de fizică cuantică și biologie moleculară',
+  },
+  {
+    id: 'ai',
+    g: 'g-ai',
+    icon: '💡',
+    title: 'Asistenți AI Specializați',
+    desc: 'Aplicații Claude Opus pentru domenii specifice: medicină, legi, RAG, fact-check',
+  },
+  {
+    id: 'monitor',
+    g: 'g-monitor',
+    icon: '📡',
+    title: 'Monitorizare Sistem',
+    desc: 'Telemetrie hardware în timp real — CPU, RAM, GPU, VRAM',
+  },
+];
+
+const SERVICES = [
+  // ── ppaisie ──────────────────────────────────────────────
+  {
+    id: 'dashboard', name: 'ppaisie Dashboard', port: 80,
+    desc: 'Centrul de comandă principal — pagina care leagă toate cele 14 microservere',
+    group: 'ppaisie', icon: '🏠', tags: ['HTTP', 'Python'],
+  },
+  {
+    id: 'analist', name: 'Analist AI', port: 5000,
+    desc: 'Analizează linkuri web și generează rapoarte PDF/TXT cu Ollama + BeautifulSoup',
+    group: 'ppaisie', icon: '🔍', tags: ['Ollama', 'Flask', 'PDF'],
+  },
+  {
+    id: 'subyoutube', name: 'SubYouTube', port: 5001,
+    desc: 'Descarcă YouTube cu yt-dlp, transcrie cu Whisper și generează subtitrări SRT/VTT',
+    group: 'ppaisie', icon: '🎬', tags: ['Whisper', 'yt-dlp', 'ffmpeg'],
+  },
+  {
+    id: 'consiliu', name: 'ConsiliuAI', port: 5555,
+    desc: 'Sistem multi-agent Ollama — dezbatere și consiliu AI colectiv cu mai mulți agenți',
+    group: 'ppaisie', icon: '🧠', tags: ['Ollama', 'Multi-agent'],
+  },
+  {
+    id: 'xtts', name: 'XTTS v2', port: 8001,
+    desc: 'TTS multilingv cu clonare voce pe GPU — trimite o înregistrare de referință, primești vocea ta',
+    group: 'ppaisie', icon: '🎙️', tags: ['Coqui XTTS', 'GPU', 'Clone voce'],
+  },
+  {
+    id: 'translate', name: 'Translate v5', port: 8002,
+    desc: 'Traducere batch documente PDF/DOCX/TXT cu Ollama (qwen2.5:14b) — SSE live progress',
+    group: 'ppaisie', icon: '🌐', tags: ['Ollama', 'qwen2.5', 'SSE'],
+  },
+  {
+    id: 'tts_ro', name: 'TTS Română Nativ', port: 8003,
+    desc: 'Sinteză vocală nativă română VITS — voce naturală de înaltă calitate',
+    group: 'ppaisie', icon: '🗣️', tags: ['VITS', 'TTS', 'Română'],
+  },
+  {
+    id: 'ocr', name: 'OCR Standard', port: 8004,
+    desc: 'OCR batch PDF/imagine cu Tesseract + ocrmypdf — output PDF cu text selectabil + ZIP',
+    group: 'ppaisie', icon: '📄', tags: ['Tesseract', 'ocrmypdf', 'batch'],
+  },
+  {
+    id: 'ocr_paddle', name: 'OCR Paddle Pro', port: 8005,
+    desc: 'PaddleOCR avansat pentru documente dificile — chirilice, manuscrise, greacă, tabele',
+    group: 'ppaisie', icon: '📋', tags: ['PaddleOCR', 'GPU', 'Pro'],
+  },
+  {
+    id: 'summarizer', name: 'Summarizer AI', port: 8007,
+    desc: 'Sumarizare inteligentă PDF/DOCX/TXT cu Ollama — rezumat executiv sau detaliat',
+    group: 'ppaisie', icon: '📝', tags: ['Ollama', 'NLP', 'Flask'],
+  },
+  {
+    id: 'extractor', name: 'Extractor Date', port: 8008,
+    desc: 'Extracție date structurate (JSON/CSV/tabel) din orice document cu Ollama',
+    group: 'ppaisie', icon: '⚗️', tags: ['Ollama', 'JSON', 'Extract'],
+  },
+  {
+    id: 'transcriber', name: 'Transcriber GPU', port: 8009,
+    desc: 'Whisper large-v3 pe CUDA float16 — audio/video orice format → text + timestampuri',
+    group: 'ppaisie', icon: '🎤', tags: ['Whisper', 'CUDA', 'large-v3'],
+  },
+  {
+    id: 'biblioteca', name: 'Biblioteca RAG', port: 8015,
+    desc: 'llama_index + Ollama cu workspaces multiple — chat interactiv pe propriile documente',
+    group: 'ppaisie', icon: '📚', tags: ['llama_index', 'RAG', 'Ollama'],
+  },
+  {
+    id: 'face', name: 'Face Server', port: 8020,
+    desc: 'InsightFace recunoaștere facială + SQLite — înregistrare, identificare, landmarks, thumbnails',
+    group: 'ppaisie', icon: '👤', tags: ['InsightFace', 'SQLite', 'GPU'],
+  },
+  // ── Labs ─────────────────────────────────────────────────
+  {
+    id: 'optica', name: 'Laborator Optică Cuantică', port: 7800,
+    desc: 'Simulator interactiv de fizică cuantică — interferometru, polarizare, beam splitter, entanglement fotonic',
+    group: 'labs', icon: '⚛️', tags: ['Node.js', 'Express', 'Canvas'],
+  },
+  {
+    id: 'genetica', name: 'Laborator Genetică', port: 8780,
+    desc: 'Simulator molecularbiology — ADN/ARN/proteine, CRISPR-Cas9, PCR, gel electroforeză, enzime de restricție',
+    group: 'labs', icon: '🧬', tags: ['Python', 'Flask', 'Canvas', 'Claude'],
+  },
+  // ── AI Asistenți ─────────────────────────────────────────
+  {
+    id: 'factcheck', name: 'FactCheck AI', port: 8765,
+    desc: 'Verificare fapte cu Claude + WebSearch live — newspaper3k pentru scraping articole',
+    group: 'ai', icon: '✅', tags: ['Claude', 'WebSearch', 'newspaper3k'],
+  },
+  {
+    id: 'linkrag', name: 'LinkRAG', port: 8770,
+    desc: 'RAG local pe linkuri și texte — ollama nomic-embed-text-v2, sqlite-vec, query top-20 → Claude Sonnet',
+    group: 'ai', icon: '🔗', tags: ['Claude Sonnet', 'sqlite-vec', 'Ollama embed'],
+  },
+  {
+    id: 'contabilitate', name: 'Contabilitate Legi', port: 8790,
+    desc: 'Monitor legislație contabilă românească cu alertă modificări + asistent Claude Opus pe norme fiscale',
+    group: 'ai', icon: '⚖️', tags: ['Claude Opus', 'Legi RO', 'Monitor'],
+  },
+  {
+    id: 'doctor', name: 'Doctor AI', port: 8800,
+    desc: 'Asistent medical Claude Opus 4.7 — consultații multi-turn, vision (RMN, analize), PDF, urgențe 112, pacienti',
+    group: 'ai', icon: '🏥', tags: ['Claude Opus 4.7', 'Vision', 'PDF', 'PWA'],
+  },
+  // ── Monitor ──────────────────────────────────────────────
+  {
+    id: 'sysmon', name: 'SYSMON', port: 9090,
+    desc: 'Telemetrie hardware live — CPU per-core, RAM, GPU RTX 5090, VRAM — grafice în timp real cu WebSocket',
+    group: 'monitor', icon: '📊', tags: ['Python', 'psutil', 'pynvml', 'RTX 5090'],
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+let statusMap = {};
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════
+function mkUrl(port) {
+  return `http://${location.hostname}:${port}/`;
+}
+
+function renderAll() {
+  const root = document.getElementById('groupsRoot');
+  root.innerHTML = '';
+
+  GROUPS.forEach(g => {
+    const svcs = SERVICES.filter(s => s.group === g.id);
+    const onlineCnt = svcs.filter(s => statusMap[s.id] === true).length;
+    const total = svcs.length;
+
+    const sec = document.createElement('section');
+    sec.className = `group-section ${g.g}`;
+
+    sec.innerHTML = `
+      <div class="group-header">
+        <div class="group-emblem">${g.icon}</div>
+        <div class="group-info">
+          <div class="group-title">${g.title}</div>
+          <div class="group-desc">${g.desc}</div>
+        </div>
+        <div class="group-online">${onlineCnt}/${total} online</div>
+      </div>
+      <div class="cards-grid">
+        ${svcs.map(s => cardHtml(s, g.g)).join('')}
+      </div>
+    `;
+    root.appendChild(sec);
+  });
+}
+
+function cardHtml(svc, gClass) {
+  const st = statusMap[svc.id];
+  const cls   = st === undefined ? 'chk'  : st ? 'up'     : 'down';
+  const lbl   = st === undefined ? '...'  : st ? 'Online' : 'Offline';
+  const offCls = st === false ? ' offline' : '';
+
+  const tags = (svc.tags || []).map(t => `<span class="card-tag">${t}</span>`).join('');
+  const url  = mkUrl(svc.port);
+
+  return `
+    <a href="${url}" target="_blank" rel="noopener" class="svc-card${offCls}">
+      <div class="card-head">
+        <div class="card-icon">${svc.icon}</div>
+        <div class="card-meta">
+          <div class="card-name">${svc.name}</div>
+          <span class="card-port">:${svc.port}</span>
+        </div>
+        <div class="card-status">
+          <div class="s-dot ${cls}"></div>
+          <span class="s-lbl ${cls}">${lbl}</span>
+        </div>
+      </div>
+      <div class="card-desc">${svc.desc}</div>
+      <div class="card-footer">
+        <div class="card-tags">${tags}</div>
+        <span class="card-open">Deschide →</span>
+      </div>
+    </a>
+  `;
+}
+
+function updateStats() {
+  const total   = SERVICES.length;
+  const online  = SERVICES.filter(s => statusMap[s.id] === true).length;
+  const offline = SERVICES.filter(s => statusMap[s.id] === false).length;
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statOnline').textContent  = online;
+  document.getElementById('statOffline').textContent = offline;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FETCH STATUS
+// ═══════════════════════════════════════════════════════════
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    statusMap = await r.json();
+  } catch(e) { console.error('status fetch failed', e); }
+  renderAll();
+  updateStats();
+  document.getElementById('lastUpdated').textContent =
+    new Date().toLocaleTimeString('ro-RO');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════
+document.getElementById('hostDisplay').textContent = `http://${location.hostname}`;
+document.getElementById('btnRefresh').addEventListener('click', fetchStatus);
+
+renderAll();   // paint skeleton
+fetchStatus(); // load statuses
+setInterval(fetchStatus, 30000);
+
+// ═══════════════════════════════════════════════════════════
+//  CANVAS BACKGROUND
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('bgCanvas');
+const ctx    = canvas.getContext('2d');
+let W, H, pts = [];
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+const COLORS = ['#06b6d4','#3b82f6','#a855f7','#14b8a6'];
+
+function initPts() {
+  pts = [];
+  const n = Math.min(Math.floor(W * H / 8000), 160);
+  for (let i = 0; i < n; i++) {
+    pts.push({
+      x:  Math.random() * W,
+      y:  Math.random() * H,
+      r:  Math.random() * 1.4 + .3,
+      vx: (Math.random() - .5) * .18,
+      vy: (Math.random() - .5) * .18,
+      a:  Math.random() * .45 + .1,
+      c:  COLORS[Math.floor(Math.random() * COLORS.length)],
+    });
+  }
+}
+
+function hex2a(hex, a) {
+  return hex + Math.round(a * 255).toString(16).padStart(2, '0');
+}
+
+function frame() {
+  ctx.clearRect(0, 0, W, H);
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.018)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 90) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y < H; y += 90) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // glow blobs
+  const blobs = [
+    { cx: W*.15, cy: H*.25, r: W*.35, color: 'rgba(59,130,246,.035)' },
+    { cx: W*.85, cy: H*.7,  r: W*.28, color: 'rgba(168,85,247,.035)' },
+    { cx: W*.5,  cy: H*.5,  r: W*.2,  color: 'rgba(20,184,166,.02)'  },
+  ];
+  blobs.forEach(b => {
+    const g = ctx.createRadialGradient(b.cx, b.cy, 0, b.cx, b.cy, b.r);
+    g.addColorStop(0, b.color);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  });
+
+  // particles
+  pts.forEach(p => {
+    p.x = (p.x + p.vx + W) % W;
+    p.y = (p.y + p.vy + H) % H;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = hex2a(p.c, p.a);
+    ctx.fill();
+  });
+
+  requestAnimationFrame(frame);
+}
+
+resize(); initPts(); frame();
+window.addEventListener('resize', () => { resize(); initPts(); });
+</script>
+</body>
+</html>
