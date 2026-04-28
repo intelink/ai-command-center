@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, send_from_directory
 import requests
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
@@ -22,6 +23,7 @@ SERVICES = [
     {"id": "transcriber",   "port": 8009},
     {"id": "biblioteca",    "port": 8015},
     {"id": "face",          "port": 8020},
+    {"id": "ora_biz",       "port": 7700},
     {"id": "optica",        "port": 7800},
     {"id": "genetica",      "port": 8780},
     {"id": "factcheck",     "port": 8765},
@@ -29,6 +31,7 @@ SERVICES = [
     {"id": "contabilitate", "port": 8790},
     {"id": "doctor",        "port": 8800},
     {"id": "sysmon",        "port": 9090},
+    {"id": "sdr_tracker",  "port": 8810},
 ]
 
 def check_service(svc):
@@ -37,6 +40,33 @@ def check_service(svc):
         return {"id": svc["id"], "up": r.status_code < 500}
     except Exception:
         return {"id": svc["id"], "up": False}
+
+SYSTEMD_SERVICES = [
+    'ppaisie.service',
+    'ora-bizantina.service',
+    'laborator-optica.service',
+    'laborator-genetica.service',
+    'sdr_tracker.service',
+    'factcheck.service',
+    'linkrag.service',
+    'contabilitate-legi.service',
+    'doctor-ai.service',
+    'sysmon.service',
+]
+
+def start_one(svc):
+    r = subprocess.run(['sudo', 'systemctl', 'start', svc], capture_output=True, text=True)
+    return svc, r.returncode == 0
+
+@app.route('/api/start-all', methods=['POST'])
+def start_all():
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(SYSTEMD_SERVICES)) as ex:
+        futures = {ex.submit(start_one, s): s for s in SYSTEMD_SERVICES}
+        for f in as_completed(futures):
+            name, ok = f.result()
+            results[name] = ok
+    return jsonify({'ok': True, 'results': results})
 
 @app.route('/api/status')
 def status():
