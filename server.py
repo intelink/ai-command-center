@@ -122,6 +122,39 @@ def restart_all():
 def gpu_status():
     return jsonify(get_gpu_info() or {})
 
+@app.route('/api/free-gpu', methods=['POST'])
+def free_gpu():
+    """Kill all processes currently using GPU VRAM (except pid 1 and kernel)."""
+    try:
+        out = subprocess.check_output(
+            ['nvidia-smi', '--query-compute-apps=pid,used_memory,name',
+             '--format=csv,noheader,nounits'],
+            text=True, timeout=5
+        ).strip()
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+    killed = []
+    errors = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = [p.strip() for p in line.split(',')]
+        pid = int(parts[0])
+        mem_mb = int(parts[1]) if len(parts) > 1 else 0
+        name = parts[2] if len(parts) > 2 else ''
+        if pid <= 1:
+            continue
+        try:
+            subprocess.run(['sudo', 'kill', '-9', str(pid)], check=True)
+            killed.append({'pid': pid, 'mem_mb': mem_mb, 'name': name})
+            logging.info(f"Killed GPU process pid={pid} mem={mem_mb}MB name={name}")
+        except Exception as e:
+            errors.append({'pid': pid, 'error': str(e)})
+
+    freed_mb = sum(p['mem_mb'] for p in killed)
+    return jsonify({'ok': True, 'killed': killed, 'freed_mb': freed_mb, 'errors': errors})
+
 @app.route('/api/status')
 def status():
     results = {}

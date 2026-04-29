@@ -199,6 +199,21 @@
     #btnRestartAll.loading { opacity: .65; pointer-events: none; }
     #btnRestartAll.ok  { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: var(--green); }
 
+    #btnFreeGpu {
+      background: rgba(239,68,68,.18);
+      border: 1px solid rgba(239,68,68,.5);
+      color: #f87171; padding: 6px 18px; border-radius: 8px;
+      cursor: pointer; font-size: 12px; font-weight: 800;
+      letter-spacing: .4px; margin-left: 8px;
+      transition: background .2s, box-shadow .2s;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    #btnFreeGpu:hover  { background: rgba(239,68,68,.30); box-shadow: 0 0 16px rgba(239,68,68,.3); }
+    #btnFreeGpu:active { transform: scale(.97); }
+    #btnFreeGpu.loading { opacity: .65; pointer-events: none; }
+    #btnFreeGpu.ok  { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: var(--green); }
+    #btnFreeGpu.err { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: var(--red); }
+
     #gpuBar {
       display: inline-flex; align-items: center; gap: 8px;
       margin-left: 16px; font-size: 11px; color: var(--muted);
@@ -445,6 +460,7 @@
     <button id="btnStartAll">⚡ Pornește toate</button>
     <button id="btnStopAll">⏹ Oprește toate</button>
     <button id="btnRestartAll">♻ Restart + eliberează GPU</button>
+    <button id="btnFreeGpu">🔥 Forțează eliberare VRAM</button>
     <span id="gpuBar" title="VRAM folosit">
       <span id="gpuLabel">GPU —</span>
       <span id="gpuBarTrack"><span id="gpuBarFill" style="width:0%"></span></span>
@@ -757,6 +773,32 @@ async function runAction(btnId, endpoint, loadingLabel, doneLabel) {
 
 document.getElementById('btnStopAll').addEventListener('click', () =>
   runAction('btnStopAll', '/api/stop-all', 'Opresc...', 'Oprite — GPU liber'));
+
+document.getElementById('btnFreeGpu').addEventListener('click', async () => {
+  const btn = document.getElementById('btnFreeGpu');
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spin">⟳</span> Eliberez VRAM...';
+  try {
+    const r = await fetch('/api/free-gpu', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) {
+      const gb = (data.freed_mb / 1024).toFixed(1);
+      btn.classList.replace('loading', 'ok');
+      btn.innerHTML = `✓ ${gb} GB eliberați (${data.killed.length} procese)`;
+    } else {
+      btn.classList.replace('loading', 'err');
+      btn.innerHTML = '✗ ' + (data.error || 'Eroare');
+    }
+  } catch(e) {
+    btn.classList.replace('loading', 'err');
+    btn.innerHTML = '✗ Eroare rețea';
+  }
+  setTimeout(() => {
+    btn.className = '';
+    btn.innerHTML = '🔥 Forțează eliberare VRAM';
+    fetchStatus(); updateGpu();
+  }, 4000);
+});
 
 document.getElementById('btnRestartAll').addEventListener('click', () =>
   runAction('btnRestartAll', '/api/restart-all', 'Restart (stop→start)...', 'Restart complet'));
