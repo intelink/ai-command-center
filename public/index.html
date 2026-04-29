@@ -171,6 +171,48 @@
     .spin { display:inline-block; animation: spinR .7s linear infinite; }
     @keyframes spinR { to { transform: rotate(360deg); } }
 
+    #btnStopAll {
+      background: rgba(239,68,68,.12);
+      border: 1px solid rgba(239,68,68,.35);
+      color: var(--red); padding: 6px 18px; border-radius: 8px;
+      cursor: pointer; font-size: 12px; font-weight: 700;
+      letter-spacing: .4px; margin-left: 8px;
+      transition: background .2s, box-shadow .2s;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    #btnStopAll:hover  { background: rgba(239,68,68,.22); box-shadow: 0 0 14px rgba(239,68,68,.2); }
+    #btnStopAll:active { transform: scale(.97); }
+    #btnStopAll.loading { opacity: .65; pointer-events: none; }
+    #btnStopAll.ok  { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: var(--green); }
+
+    #btnRestartAll {
+      background: rgba(168,85,247,.12);
+      border: 1px solid rgba(168,85,247,.35);
+      color: #a855f7; padding: 6px 18px; border-radius: 8px;
+      cursor: pointer; font-size: 12px; font-weight: 700;
+      letter-spacing: .4px; margin-left: 8px;
+      transition: background .2s, box-shadow .2s;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    #btnRestartAll:hover  { background: rgba(168,85,247,.22); box-shadow: 0 0 14px rgba(168,85,247,.2); }
+    #btnRestartAll:active { transform: scale(.97); }
+    #btnRestartAll.loading { opacity: .65; pointer-events: none; }
+    #btnRestartAll.ok  { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: var(--green); }
+
+    #gpuBar {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-left: 16px; font-size: 11px; color: var(--muted);
+    }
+    #gpuBarTrack {
+      width: 80px; height: 6px; background: rgba(255,255,255,.08);
+      border-radius: 3px; overflow: hidden;
+    }
+    #gpuBarFill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #06b6d4, #a855f7);
+      transition: width .6s ease;
+    }
+
     /* ── GROUP SECTION ── */
     .group-section { margin-bottom: 52px; }
 
@@ -401,6 +443,13 @@
     &nbsp;· auto-reîmprospătare 30s
     <button id="btnRefresh">↺ Acum</button>
     <button id="btnStartAll">⚡ Pornește toate</button>
+    <button id="btnStopAll">⏹ Oprește toate</button>
+    <button id="btnRestartAll">♻ Restart + eliberează GPU</button>
+    <span id="gpuBar" title="VRAM folosit">
+      <span id="gpuLabel">GPU —</span>
+      <span id="gpuBarTrack"><span id="gpuBarFill" style="width:0%"></span></span>
+      <span id="gpuPct">—</span>
+    </span>
   </div>
 
   <!-- GROUPS rendered by JS -->
@@ -544,6 +593,16 @@ const SERVICES = [
     desc: 'Graf global de evenimente inspirat din Recorded Future — GDELT 2.0 live (update 15min), forță D3.js, noduri colorate țări/org/persoane, conexiuni conflict/cooperare, timeline, surse știri',
     group: 'labs', icon: '🕸️', tags: ['GDELT 2.0', 'D3.js', 'SQLite', 'Live Feed'],
   },
+  {
+    id: 'ocr_bizantine', name: 'OCR Manuscrise Bizantine', port: 8830,
+    desc: 'Transcriere manuscrise grecești sec. XI–XVII cu Qwen3-VL-8B. Bbox overlay interactiv, CER/WER cu/fără diacritice, export TXT/JSON/PDF, streaming WebSocket.',
+    group: 'labs', icon: '🏛', tags: ['Qwen3-VL', 'OCR', 'Byzantine', 'GPU'],
+  },
+  {
+    id: 'kraken_gr', name: 'HTR Bizantine · Kraken', port: 8840,
+    desc: 'HTR specializat pe manuscrise grecești (Kraken 7 + modele pre-antrenate). Segmentare baseline, overlay SVG interactiv, export TXT/JSON/ALTO XML.',
+    group: 'labs', icon: '🏺', tags: ['Kraken', 'HTR', 'Byzantine', 'GPU', 'ALTO'],
+  },
   // ── AI Asistenți ─────────────────────────────────────────
   {
     id: 'factcheck', name: 'FactCheck AI', port: 8765,
@@ -674,31 +733,49 @@ async function fetchStatus() {
 document.getElementById('hostDisplay').textContent = `http://${location.hostname}`;
 document.getElementById('btnRefresh').addEventListener('click', fetchStatus);
 
-const btnStart = document.getElementById('btnStartAll');
-btnStart.addEventListener('click', async () => {
-  btnStart.classList.add('loading');
-  btnStart.innerHTML = '<span class="spin">⟳</span> Se pornesc...';
+document.getElementById('btnStartAll').addEventListener('click', () =>
+  runAction('btnStartAll', '/api/start-all', 'Se pornesc...', 'Toate pornite'));
+
+// ── Generic action button helper ──────────────────────────────
+async function runAction(btnId, endpoint, loadingLabel, doneLabel) {
+  const btn = document.getElementById(btnId);
+  const orig = btn.innerHTML;
+  btn.classList.add('loading');
+  btn.innerHTML = `<span class="spin">⟳</span> ${loadingLabel}`;
   try {
-    const r = await fetch('/api/start-all', { method: 'POST' });
+    const r = await fetch(endpoint, { method: 'POST' });
     const data = await r.json();
-    const failed = Object.values(data.results).filter(v => !v).length;
-    if (failed === 0) {
-      btnStart.classList.replace('loading', 'ok');
-      btnStart.innerHTML = '✓ Toate pornite';
-    } else {
-      btnStart.classList.replace('loading', 'err');
-      btnStart.innerHTML = `✗ ${failed} erori`;
-    }
+    const failed = Object.values(data.results || {}).filter(v => !v).length;
+    btn.classList.replace('loading', failed === 0 ? 'ok' : 'err');
+    btn.innerHTML = failed === 0 ? `✓ ${doneLabel}` : `✗ ${failed} erori`;
   } catch(e) {
-    btnStart.classList.replace('loading', 'err');
-    btnStart.innerHTML = '✗ Eroare rețea';
+    btn.classList.replace('loading', 'err');
+    btn.innerHTML = '✗ Eroare rețea';
   }
-  setTimeout(() => {
-    btnStart.className = '';
-    btnStart.innerHTML = '⚡ Pornește toate';
-    fetchStatus();
-  }, 3000);
-});
+  setTimeout(() => { btn.className = ''; btn.innerHTML = orig; fetchStatus(); updateGpu(); }, 3000);
+}
+
+document.getElementById('btnStopAll').addEventListener('click', () =>
+  runAction('btnStopAll', '/api/stop-all', 'Opresc...', 'Oprite — GPU liber'));
+
+document.getElementById('btnRestartAll').addEventListener('click', () =>
+  runAction('btnRestartAll', '/api/restart-all', 'Restart (stop→start)...', 'Restart complet'));
+
+// ── GPU bar ────────────────────────────────────────────────────
+async function updateGpu() {
+  try {
+    const g = await (await fetch('/api/gpu')).json();
+    if (!g || !g.total_mb) return;
+    const pct = Math.round(g.used_mb / g.total_mb * 100);
+    document.getElementById('gpuLabel').textContent =
+      g.name.replace('NVIDIA GeForce ', '') + ' VRAM';
+    document.getElementById('gpuBarFill').style.width = pct + '%';
+    document.getElementById('gpuPct').textContent =
+      `${(g.used_mb/1024).toFixed(1)}/${(g.total_mb/1024).toFixed(0)} GB`;
+  } catch(e) {}
+}
+updateGpu();
+setInterval(updateGpu, 15000);
 
 renderAll();   // paint skeleton
 fetchStatus(); // load statuses

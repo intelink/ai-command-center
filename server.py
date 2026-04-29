@@ -31,7 +31,10 @@ SERVICES = [
     {"id": "contabilitate", "port": 8790},
     {"id": "doctor",        "port": 8800},
     {"id": "sysmon",        "port": 9090},
-    {"id": "sdr_tracker",  "port": 8810},
+    {"id": "sdr_tracker",       "port": 8810},
+    {"id": "intelligence_graph","port": 8820},
+    {"id": "ocr_bizantine",     "port": 8830},
+    {"id": "kraken_gr",         "port": 8840},
 ]
 
 def check_service(svc):
@@ -52,11 +55,34 @@ SYSTEMD_SERVICES = [
     'contabilitate-legi.service',
     'doctor-ai.service',
     'sysmon.service',
+    'ocr-bizantine.service',
+    'kraken-gr.service',
 ]
 
 def start_one(svc):
     r = subprocess.run(['sudo', 'systemctl', 'start', svc], capture_output=True, text=True)
     return svc, r.returncode == 0
+
+def stop_one(svc):
+    r = subprocess.run(['sudo', 'systemctl', 'stop', svc], capture_output=True, text=True)
+    return svc, r.returncode == 0
+
+def get_gpu_info():
+    try:
+        out = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=name,memory.used,memory.total,utilization.gpu',
+             '--format=csv,noheader,nounits'],
+            text=True, timeout=3
+        ).strip()
+        parts = [p.strip() for p in out.split(',')]
+        return {
+            'name': parts[0],
+            'used_mb': int(parts[1]),
+            'total_mb': int(parts[2]),
+            'util_pct': int(parts[3]),
+        }
+    except Exception:
+        return None
 
 @app.route('/api/start-all', methods=['POST'])
 def start_all():
@@ -67,6 +93,34 @@ def start_all():
             name, ok = f.result()
             results[name] = ok
     return jsonify({'ok': True, 'results': results})
+
+@app.route('/api/stop-all', methods=['POST'])
+def stop_all():
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(SYSTEMD_SERVICES)) as ex:
+        futures = {ex.submit(stop_one, s): s for s in SYSTEMD_SERVICES}
+        for f in as_completed(futures):
+            name, ok = f.result()
+            results[name] = ok
+    return jsonify({'ok': True, 'results': results})
+
+@app.route('/api/restart-all', methods=['POST'])
+def restart_all():
+    # Stop first (sequential — frees GPU memory before restart)
+    with ThreadPoolExecutor(max_workers=len(SYSTEMD_SERVICES)) as ex:
+        list(ex.map(stop_one, SYSTEMD_SERVICES))
+    # Then start all in parallel
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(SYSTEMD_SERVICES)) as ex:
+        futures = {ex.submit(start_one, s): s for s in SYSTEMD_SERVICES}
+        for f in as_completed(futures):
+            name, ok = f.result()
+            results[name] = ok
+    return jsonify({'ok': True, 'results': results})
+
+@app.route('/api/gpu')
+def gpu_status():
+    return jsonify(get_gpu_info() or {})
 
 @app.route('/api/status')
 def status():
