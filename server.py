@@ -153,6 +153,13 @@ def free_gpu():
             errors.append({'pid': pid, 'error': str(e)})
 
     freed_mb = sum(p['mem_mb'] for p in killed)
+
+    # Sync systemd state: stop all services so "start-all" works correctly afterward.
+    # Without this, systemd sees them as "active" (nohup orphans) and skips start.
+    if killed:
+        with ThreadPoolExecutor(max_workers=len(SYSTEMD_SERVICES)) as ex:
+            list(ex.map(stop_one, SYSTEMD_SERVICES))
+
     return jsonify({'ok': True, 'killed': killed, 'freed_mb': freed_mb, 'errors': errors})
 
 @app.route('/api/status')
